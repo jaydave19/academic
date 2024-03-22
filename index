@@ -1,0 +1,164 @@
+const express =require('express')
+const app=express()
+const port=8057
+var md5 = require('md5');
+var bodyParser=require("body-parser"); 
+app.set('view engine','ejs');
+
+var mysql = require('mysql');
+const { Result } = require('express-validator');
+app.use(bodyParser.urlencoded({extended:true})); 
+
+app.use(express.static('public'))
+
+var db = mysql.createConnection({
+    host     : 'localhost',
+    user     : 'root',
+    password : 'root',
+    database : 'userregister',
+    dateStrings:true
+});
+
+app.get('/',(req,res)=>{
+    res.render('reg')
+})
+
+function randomString(length, chars) {
+    var result = '';
+    for (var i = length; i > 0; --i) result += chars[Math.floor(Math.random() * chars.length)];
+    return result;
+}
+
+
+
+
+app.post('/',(req,res)=>{
+
+    var hlink = randomString(32, '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ');
+    email=req.body.email
+    console.log(email,"*****************************************************************")
+    db.query(`select count(*) as count from registration where email='${email}'`,(err,result)=>{
+        if(err) throw err;
+        const count =result[0].count;
+        var emailExists= count===1;
+        console.log(count)
+        console.log(emailExists)
+        if(emailExists==true){
+            console.log("jay");
+            res.render('reg',{'msg':emailExists})
+        }
+        else{
+            console.log("dhar")
+            db.query(`INSERT INTO registration (firstname, lastname, phone, gender,email,city,birthdate,hreflink) VALUES('${req.body.fname}','${req.body.lname}','${req.body.phone}','${req.body.radio}','${req.body.email}','${req.body.city}','${req.body.DateOfBirth}','${hlink}')`,(err,result)=>{
+                if (err) throw err;
+                res.render('active',{'link':hlink})
+            })
+        }
+    })
+    
+})
+
+
+app.get('/createpass/:link',(req,res)=>{
+
+    var link=req.params.link
+    db.query(`select createdat from registration where hreflink='${link}'`,(err,result)=>{
+        if(err)throw err;
+        console.log(result,"time")
+        var currenttime=new Date().toTimeString();
+        var time=new Date(new Date(result[0].createdat).getTime()+ 5 * 60000).toTimeString();
+        if(currenttime<time){
+            res.render('createpass')
+        }
+        else{
+            db.query(`update registration set userstatus='deactive' where hreflink='${link}'`)
+            res.send('link is expire')
+        }
+
+    })
+    
+})
+
+app.post('/createpass/:link',(req,res)=>{
+    let link=req.params.link
+    var sault = randomString(4, '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ');
+
+    password=req.body.password
+    concatp=password+`${sault}`
+    newpassword=md5(concatp)
+
+    db.query(`update registration set userstatus='active',password='${newpassword}',sault='${sault}' where hreflink='${link}'`)
+    res.send(`user is active and login link is : http://127.0.0.1:8057/login`)
+})
+
+
+
+
+app.get('/login',(req,res)=>{
+    res.render('login')
+})
+
+app.get('/forgot',(req,res)=>{
+    res.render('forgot')
+})
+
+app.post('/forgot',(req,res)=>{
+    email=req.body.email
+    db.query(`select hreflink from registration where email='${req.body.email}'`,(err,result)=>{
+        if(err) throw err;
+        console.log(result,"{}{}{}")
+        res.redirect(`/createpass/${result[0].hreflink}`)
+    })
+
+    
+})
+
+
+// app.get('/login/:id',(req,res)=>{
+//     link=req.params.id
+//     console.log(link,"MMMMMMMMMMMMMMMMMMMMMMMMMMMMMM")
+//     res.render('login',{'link':link})
+// })
+
+// app.post('/login',(req,res)=>{
+//     db.query(`select sault from registration`,(err,result)=>{
+//         result.forEach(element => {
+//             if(err)throw err;
+//             console.log(element,"[][")
+//             db.query(`select count(*) as count from registration where email='${req.body.email}' and password='${md5(req.body.password+element.sault)}'`,(err,data)=>{
+//                 if(err) throw err;
+//                 console.log(data[0].count)
+//                 if(data[0].count==1)
+//                 {
+//                     res.send('login successful')
+//                 }
+//             })
+//         });
+// })
+// })
+
+app.post('/login',(req,res)=>{
+    db.query(`select sault,hreflink from registration where email='${req.body.email}'`,(err,result)=>{
+      
+            if(err)throw err;
+            console.log(result,"sffsdfsdf{}{}{}{}{}{}{")
+            db.query(`select count(*) as count from registration where email='${req.body.email}' and password='${md5(req.body.password+result[0].sault)}'`,(err,data)=>{
+                if(err) throw err;
+                console.log(data[0].count)
+                if(data[0].count==1)
+                {
+                    res.send('login successful')
+                }
+                else{
+                    res.send('login unsuccessful')
+                }
+            })
+            
+})
+})
+
+app.listen(port,()=>{
+    console.log(`http://127.0.0.1:${port}/`)
+})
+
+
